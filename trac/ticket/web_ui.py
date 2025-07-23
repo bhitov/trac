@@ -18,6 +18,7 @@ import csv
 from datetime import datetime
 import functools
 import io
+import json
 import pkg_resources
 import re
 
@@ -101,6 +102,7 @@ class TicketModule(Component):
             """)
 
     ticket_path_re = re.compile(r'/ticket/([0-9]+)$')
+    ticket_updates_path_re = re.compile(r'/ticket/([0-9]+)/updates$')
 
     def __init__(self):
         self._warn_for_moved_attr = set()
@@ -151,6 +153,14 @@ class TicketModule(Component):
         if match:
             req.args['id'] = match.group(1)
             return True
+        
+        # Handle live updates endpoint
+        match = self.ticket_updates_path_re.match(req.path_info)
+        if match:
+            req.args['id'] = match.group(1)
+            req.args['updates'] = True
+            return True
+            
         if req.path_info == '/newticket':
             return True
 
@@ -158,6 +168,8 @@ class TicketModule(Component):
         if 'id' in req.args:
             if req.path_info == '/newticket':
                 raise TracError(_("id can't be set for a new ticket request."))
+            if 'updates' in req.args:
+                return self._process_live_updates_request(req)
             return self._process_ticket_request(req)
         return self._process_newticket_request(req)
 
@@ -547,6 +559,89 @@ class TicketModule(Component):
         chrome.add_jquery_ui(req)
         return 'ticket.html', data
 
+    def _process_live_updates_request(self, req):
+        """Handle live updates API requests for real-time ticket notifications."""
+        try:
+            ticket_id = req.args.getint('id')
+        except ValueError:
+            self._send_json_error(req, 400, "Invalid ticket ID")
+            return
+        
+        # Check if ticket exists and permissions
+        try:
+            ticket = model.Ticket(self.env, ticket_id)
+            req.perm(ticket.resource).require('TICKET_VIEW')
+        except ResourceNotFound:
+            self._send_json_error(req, 404, "Ticket not found")
+            return
+        
+        # Get the 'since' timestamp parameter
+        since_param = req.args.get('since', '0')
+        try:
+            since_timestamp = int(since_param)
+            since_datetime = from_utimestamp(since_timestamp) if since_timestamp > 0 else None
+        except ValueError:
+            self._send_json_error(req, 400, "Invalid 'since' parameter")
+            return
+        
+        # Get the latest changetime for this ticket
+        latest_changetime = ticket['changetime']
+        latest_timestamp = to_utimestamp(latest_changetime) if latest_changetime else 0
+        
+        changes = []
+        
+        # If we have a newer changetime than the client's 'since' timestamp
+        if latest_timestamp > since_timestamp:
+            # Get recent changes from the ticket_change table
+            with self.env.db_query as db:
+                rows = db("""
+                    SELECT time, author, field, oldvalue, newvalue 
+                    FROM ticket_change 
+                    WHERE ticket = %s AND time > %s 
+                    ORDER BY time DESC 
+                    LIMIT 10
+                """, (ticket_id, since_timestamp))
+                
+                for time, author, field, oldvalue, newvalue in rows:
+                    changes.append({
+                        'time': int(time),
+                        'author': author,
+                        'field': field,
+                        'oldvalue': oldvalue,
+                        'newvalue': newvalue,
+                        'formatted_time': from_utimestamp(time).strftime('%H:%M:%S')
+                    })
+        
+        # Prepare JSON response
+        response_data = {
+            'ticket_id': ticket_id,
+            'changes': changes,
+            'last_update': int(latest_timestamp),
+            'has_updates': len(changes) > 0
+        }
+        
+        # Send JSON response
+        req.send_response(200)
+        req.send_header('Content-Type', 'application/json')
+        req.end_headers()
+        req.write(json.dumps(response_data).encode('utf-8'))
+        
+        # Don't return anything to avoid template processing
+        return None
+    
+    def _send_json_error(self, req, status, message):
+        """Send a JSON error response with proper status code."""
+        error_data = {
+            'error': True,
+            'status': status,
+            'message': message
+        }
+        
+        req.send_response(status)
+        req.send_header('Content-Type', 'application/json')
+        req.end_headers()
+        req.write(json.dumps(error_data).encode('utf-8'))
+
     def _process_ticket_request(self, req):
         id = req.args.getint('id')
         version = req.args.getint('version', None)
@@ -758,6 +853,7 @@ class TicketModule(Component):
                               })
         add_stylesheet(req, 'common/css/ticket.css')
         add_script(req, 'common/js/threaded_comments.js')
+        add_script(req, 'common/js/live_updates.js')
         chrome = Chrome(self.env)
         chrome.add_wiki_toolbars(req)
         if not data['disable_submit']:
