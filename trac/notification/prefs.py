@@ -58,6 +58,11 @@ class NotificationPreferences(Component):
 
     def render_preference_panel(self, req, panel, path_info=None):
         if req.method == 'POST':
+            # Handle phone number update
+            phone_number = req.args.get('phone_number', '').strip()
+            if phone_number != req.session.get('phone_number', ''):
+                req.session.set('phone_number', phone_number)
+            
             action_arg = req.args.getfirst('action', '').split('_', 1)
             if len(action_arg) == 2:
                 action, arg = action_arg
@@ -119,7 +124,8 @@ class NotificationPreferences(Component):
             'default_rules': default_rules,
             'adverbs': ('always', 'never'),
             'adverb_labels': {'always': _("Notify"),
-                              'never': _("Never notify")}
+                              'never': _("Never notify")},
+            'phone_number': req.session.get('phone_number', '')
         }
         Chrome(self.env).add_jquery_ui(req)
         return 'prefs_notification.html', dict(data=data)

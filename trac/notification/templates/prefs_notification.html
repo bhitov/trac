@@ -110,6 +110,24 @@
     #   for distributor, rules in data['rules'].items():
     <div class="ruleset">
       <h3>${distributor}</h3>
+      #     if distributor == 'sms':
+      <div class="field">
+        <p>
+          <label for="phone_number">${_("Phone Number:")}</label>
+          <input type="text" id="phone_number" name="phone_number" 
+                 value="${data.get('phone_number', '')}"
+                 placeholder="+1234567890" />
+        </p>
+        <p class="hint">
+          # trans
+
+          Enter your phone number in international format (e.g., +1234567890)
+          to receive SMS notifications.
+
+          # endtrans
+        </p>
+      </div>
+      #     endif
       <div class="field">
         <p>
           <label for="format-${distributor}">${_("Format:")}</label>

@@ -15,3 +15,6 @@
 from trac.notification.api import IEmailSender, NotificationSystem
 from trac.notification.mail import (EMAIL_LOOKALIKE_PATTERN, MAXHEADERLEN,
                                     SmtpEmailSender, SendmailEmailSender)
+
+# Import SMS components to ensure they're loaded
+from . import sms
