@@ -307,9 +307,14 @@ class ClerkLoginModule(Component):
         # Clear our cookie
         self._set_cookie(req, cfg.token_cookie_name(), '', cfg, max_age=0)
         
-        # For now, just redirect locally without going to Clerk
-        # The Clerk signout URL seems to be giving 404 errors
-        req.redirect(cfg.after_sign_out_url() or req.href())
+        # Redirect back to where the user came from
+        referer = req.get_header('Referer')
+        if referer and referer.startswith(req.base_url):
+            # If we have a valid referer from our site, go back there
+            req.redirect(referer)
+        else:
+            # Otherwise redirect to the project root
+            req.redirect(req.href.wiki())
     
     # --- Helpers
     
