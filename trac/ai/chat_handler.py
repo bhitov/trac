@@ -20,8 +20,9 @@ from datetime import datetime
 from trac.core import Component, implements
 from trac.config import Option
 from trac.web.api import IRequestHandler, RequestDone
-from trac.web.chrome import ITemplateProvider
+from trac.web.chrome import ITemplateProvider, INavigationContributor, tag
 from trac.perm import IPermissionRequestor
+from trac.util.translation import _
 
 from trac.ai.context_service import ContextService
 from trac.ai.search_service import FuzzySearchService
@@ -35,7 +36,7 @@ except ImportError:
 class ChatHandler(Component):
     """Handles AI chat requests for ticket assistance."""
     
-    implements(IRequestHandler, ITemplateProvider, IPermissionRequestor)
+    implements(IRequestHandler, ITemplateProvider, IPermissionRequestor, INavigationContributor)
     
     # Configuration options
     openai_api_key = Option('ai', 'openai_api_key', '',
@@ -290,3 +291,14 @@ When answering questions:
         # For now, we just require TICKET_VIEW
         # Could add AI_CHAT permission in the future
         return []
+    
+    # INavigationContributor methods
+    def get_active_navigation_item(self, req):
+        """Return the active navigation item."""
+        return 'ai' if req.path_info.startswith('/ai') else None
+    
+    def get_navigation_items(self, req):
+        """Add AI Assistant to the main navigation."""
+        if 'TICKET_VIEW' in req.perm:
+            yield ('mainnav', 'ai',
+                   tag.a(_("AI Assistant"), href=req.href.ai()))
