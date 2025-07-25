@@ -15,7 +15,7 @@
 
 from trac.core import Component
 from trac.ticket.model import Ticket
-from trac.util.datefmt import format_datetime
+from trac.util.datefmt import format_datetime, utc
 
 
 class FuzzySearchService(Component):
@@ -80,6 +80,8 @@ class FuzzySearchService(Component):
                 # Check permission
                 ticket = Ticket(self.env, ticket_id)
                 if 'TICKET_VIEW' in req.perm(ticket.resource):
+                    # Use request timezone or UTC as fallback
+                    tzinfo = getattr(req, 'tz', None) or utc
                     tickets.append({
                         'id': ticket_id,
                         'summary': row[1],
@@ -89,8 +91,8 @@ class FuzzySearchService(Component):
                         'owner': row[5],
                         'component': row[6],
                         'milestone': row[7],
-                        'created': format_datetime(row[8], tzinfo=req.tz),
-                        'modified': format_datetime(row[9], tzinfo=req.tz),
+                        'created': format_datetime(row[8], tzinfo=tzinfo),
+                        'modified': format_datetime(row[9], tzinfo=tzinfo),
                         'relevance': self._calculate_relevance(row[1], row[2], search_terms)
                     })
         
@@ -147,15 +149,17 @@ class FuzzySearchService(Component):
                 # Check permission
                 ticket = Ticket(self.env, ticket_id)
                 if 'TICKET_VIEW' in req.perm(ticket.resource):
+                    # Use request timezone or UTC as fallback
+                    tzinfo = getattr(req, 'tz', None) or utc
                     results.append({
                         'ticket_id': ticket_id,
                         'summary': row[1],
-                        'comment_time': format_datetime(row[2], tzinfo=req.tz),
+                        'comment_time': format_datetime(row[2], tzinfo=tzinfo),
                         'comment_author': row[3],
                         'comment_text': row[4],
                         'status': row[5],
                         'priority': row[6],
-                        'modified': format_datetime(row[7], tzinfo=req.tz),
+                        'modified': format_datetime(row[7], tzinfo=tzinfo),
                         'relevance': self._calculate_relevance(row[1], row[4], search_terms)
                     })
         
@@ -238,11 +242,18 @@ class FuzzySearchService(Component):
         if results['tickets']:
             context_parts.append(f"\nTickets matching '{query}' ({len(results['tickets'])} found):")
             for ticket in results['tickets']:
+                # Handle None values safely
+                description = ticket['description'] or ""
+                summary = ticket['summary'] or f"Ticket #{ticket['id']}"
+                status = ticket['status'] or "unknown"
+                priority = ticket['priority'] or "unknown"
+                owner = ticket['owner'] or "unassigned"
+                
                 ticket_info = f"""
-Ticket #{ticket['id']}: {ticket['summary']}
-Status: {ticket['status']} | Priority: {ticket['priority']} | Owner: {ticket['owner']}
+Ticket #{ticket['id']}: {summary}
+Status: {status} | Priority: {priority} | Owner: {owner}
 Modified: {ticket['modified']}
-Description excerpt: {ticket['description'][:200]}{'...' if len(ticket['description']) > 200 else ''}
+Description excerpt: {description[:200]}{'...' if len(description) > 200 else ''}
 """
                 context_parts.append(ticket_info)
         

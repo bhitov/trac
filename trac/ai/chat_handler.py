@@ -15,6 +15,7 @@
 
 import json
 import re
+import traceback
 from datetime import datetime
 
 from trac.core import Component, implements
@@ -45,7 +46,7 @@ class ChatHandler(Component):
     openai_model = Option('ai', 'model', 'gpt-3.5-turbo',
         doc="OpenAI model to use (e.g., gpt-3.5-turbo, gpt-4)")
     
-    max_context_tickets = Option('ai', 'max_context_tickets', '20',
+    max_context_tickets = Option('ai', 'max_context_tickets', '50',
         doc="Maximum number of recent tickets to include in context")
     
     search_threshold = Option('ai', 'search_threshold', '20',
@@ -91,38 +92,71 @@ class ChatHandler(Component):
     
     def _handle_chat_request(self, req):
         """Handle chat API requests."""
+        self.log.info("=== AI Chat Request Started ===")
+        
+        # Check OpenAI API key
         if not self.openai_api_key:
+            self.log.error("OpenAI API key not configured")
             self._send_json_error(req, 500, "OpenAI API key not configured")
             return
         
+        self.log.info(f"OpenAI API key configured: {bool(self.openai_api_key)}")
+        
+        # Check OpenAI library
         if not OpenAI:
+            self.log.error("OpenAI library not installed")
             self._send_json_error(req, 500, "OpenAI library not installed. Run: pip install openai")
             return
         
+        self.log.info("OpenAI library available")
+        
         # Parse request
         try:
-            data = json.loads(req.read())
+            self.log.info("Reading request data...")
+            raw_data = req.read()
+            self.log.info(f"Raw request data length: {len(raw_data) if raw_data else 0}")
+            
+            data = json.loads(raw_data)
+            self.log.info(f"Parsed JSON data: {data}")
+            
             message = data.get('message', '').strip()
-        except (json.JSONDecodeError, ValueError):
+            self.log.info(f"Extracted message: '{message}' (length: {len(message)})")
+            
+        except (json.JSONDecodeError, ValueError) as e:
+            self.log.error(f"JSON decode error: {e}")
+            self.log.error(f"Raw data was: {raw_data}")
             self._send_json_error(req, 400, "Invalid request format")
+            return
+        except Exception as e:
+            self.log.error(f"Unexpected error parsing request: {e}")
+            self.log.error(f"Traceback: {traceback.format_exc()}")
+            self._send_json_error(req, 500, f"Error parsing request: {str(e)}")
             return
         
         if not message:
+            self.log.error("Empty message received")
             self._send_json_error(req, 400, "Message cannot be empty")
             return
         
         # Generate response
         try:
+            self.log.info("Starting AI response generation...")
             response = self._generate_ai_response(req, message)
+            self.log.info(f"AI response generated successfully: {len(response)} characters")
+            
             self._send_json_response(req, 200, {
                 'response': response,
                 'timestamp': datetime.now().isoformat()
             })
+            self.log.info("Response sent successfully")
+            
         except RequestDone:
             # This is expected, re-raise it
+            self.log.info("Request completed (RequestDone)")
             raise
         except Exception as e:
             self.log.error(f"Error generating AI response: {e}")
+            self.log.error(f"Full traceback: {traceback.format_exc()}")
             self._send_json_error(req, 500, f"Error generating response: {str(e)}")
     
     def _generate_ai_response(self, req, user_message):
@@ -135,47 +169,142 @@ class ChatHandler(Component):
         Returns:
             str: AI response
         """
-        # Get recent tickets for context
-        context_limit = int(self.max_context_tickets)
-        base_context = self.context_service.format_tickets_for_context(req, include_comments=True)
-        
-        # Check if we should perform a search
-        search_context = ""
-        total_tickets = self.search_service.get_total_ticket_count()
-        search_threshold = int(self.search_threshold)
-        
-        if total_tickets > search_threshold:
-            # Analyze if the user's message suggests a search
-            if self._should_search(user_message):
-                search_query = self._extract_search_terms(user_message)
-                if search_query:
-                    search_context = self.search_service.format_search_results_for_context(req, search_query)
-        
-        # Build the system prompt
-        system_prompt = self._build_system_prompt(total_tickets, search_threshold)
-        
-        # Build the full context
-        full_context = base_context
-        if search_context:
-            full_context += "\n\n" + search_context
-        
-        # Call OpenAI API
-        client = OpenAI(api_key=self.openai_api_key)
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": full_context},
-            {"role": "user", "content": user_message}
-        ]
-        
-        response = client.chat.completions.create(
-            model=self.openai_model,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=1000
-        )
-        
-        return response.choices[0].message.content
+        try:
+            self.log.info(f"=== Generating AI Response for: '{user_message}' ===")
+            
+            # Get recent tickets for context
+            context_limit = int(self.max_context_tickets)
+            self.log.info(f"Getting context with limit: {context_limit}")
+            
+            # Check if context service is available
+            if not hasattr(self, 'context_service') or self.context_service is None:
+                self.log.error("Context service not available")
+                raise Exception("Context service not initialized")
+            
+            self.log.info("Calling context_service.format_tickets_for_context...")
+            base_context = self.context_service.format_tickets_for_context(req, include_comments=True, limit=context_limit)
+            self.log.info(f"Base context generated: {len(base_context)} characters")
+            
+            # Check if we should perform a search
+            search_context = ""
+            
+            # Check if search service is available
+            if not hasattr(self, 'search_service') or self.search_service is None:
+                self.log.error("Search service not available")
+                raise Exception("Search service not initialized")
+            
+            self.log.info("Getting total ticket count...")
+            total_tickets = self.search_service.get_total_ticket_count()
+            search_threshold = int(self.search_threshold)
+            self.log.info(f"Total tickets: {total_tickets}, search threshold: {search_threshold}")
+            
+            if total_tickets > search_threshold:
+                self.log.info("Checking if search is needed...")
+                # Analyze if the user's message suggests a search
+                if self._should_search(user_message):
+                    self.log.info("Search is needed, extracting search terms...")
+                    search_query = self._extract_search_terms(user_message)
+                    self.log.info(f"Search query: '{search_query}'")
+                    if search_query:
+                        search_context = self.search_service.format_search_results_for_context(req, search_query)
+                        self.log.info(f"Search context generated: {len(search_context)} characters")
+                else:
+                    self.log.info("No search needed for this message")
+            else:
+                self.log.info("Total tickets below search threshold, skipping search")
+            
+            # Build the system prompt
+            self.log.info("Building system prompt...")
+            system_prompt = self._build_system_prompt(total_tickets, search_threshold)
+            self.log.info(f"System prompt built: {len(system_prompt)} characters")
+            
+            # Build the full context
+            full_context = base_context
+            if search_context:
+                full_context += "\n\n" + search_context
+            self.log.info(f"Full context: {len(full_context)} characters")
+            
+            # Call OpenAI API
+            self.log.info("Creating OpenAI client...")
+            if not self.openai_api_key:
+                raise Exception("OpenAI API key is empty")
+            
+            try:
+                client = OpenAI(api_key=self.openai_api_key)
+                self.log.info("OpenAI client created successfully")
+            except Exception as e:
+                self.log.error(f"Failed to create OpenAI client: {e}")
+                raise Exception(f"OpenAI client creation failed: {str(e)}")
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": full_context},
+                {"role": "user", "content": user_message}
+            ]
+            self.log.info(f"Prepared {len(messages)} messages for OpenAI API")
+            self.log.info(f"Using model: {self.openai_model}")
+            
+            self.log.info("Calling OpenAI API...")
+            try:
+                response = client.chat.completions.create(
+                    model=self.openai_model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                self.log.info("OpenAI API call completed")
+            except Exception as e:
+                self.log.error(f"OpenAI API call failed: {e}")
+                self.log.error(f"API call traceback: {traceback.format_exc()}")
+                raise Exception(f"OpenAI API call failed: {str(e)}")
+            
+            # Validate response structure to prevent NoneType errors
+            self.log.info("Validating OpenAI response...")
+            if response is None:
+                self.log.error("OpenAI response is None")
+                raise Exception("Invalid OpenAI API response: response is None")
+            
+            if not hasattr(response, 'choices'):
+                self.log.error(f"OpenAI response missing 'choices' attribute. Response type: {type(response)}")
+                self.log.error(f"Response attributes: {dir(response) if response else 'None'}")
+                raise Exception("Invalid OpenAI API response: no choices attribute")
+            
+            if response.choices is None:
+                self.log.error("OpenAI response.choices is None")
+                raise Exception("Invalid OpenAI API response: choices is None")
+            
+            if len(response.choices) == 0:
+                self.log.error("OpenAI response.choices is empty")
+                raise Exception("Invalid OpenAI API response: empty choices list")
+            
+            self.log.info(f"OpenAI returned {len(response.choices)} choices")
+            
+            choice = response.choices[0]
+            if choice is None:
+                self.log.error("First choice is None")
+                raise Exception("Invalid OpenAI API response: first choice is None")
+            
+            if not hasattr(choice, 'message'):
+                self.log.error(f"Choice missing 'message' attribute. Choice type: {type(choice)}")
+                self.log.error(f"Choice attributes: {dir(choice) if choice else 'None'}")
+                raise Exception("Invalid OpenAI API response: choice has no message attribute")
+            
+            if choice.message is None:
+                self.log.error("Choice message is None")
+                raise Exception("Invalid OpenAI API response: choice message is None")
+            
+            content = choice.message.content
+            if content is None:
+                self.log.warning("Choice message content is None, using fallback")
+                content = "No response generated"
+            
+            self.log.info(f"Successfully extracted response content: {len(content)} characters")
+            return content
+            
+        except Exception as e:
+            self.log.error(f"Error in _generate_ai_response: {e}")
+            self.log.error(f"Full traceback: {traceback.format_exc()}")
+            raise
     
     def _should_search(self, message):
         """Determine if the message warrants a search.

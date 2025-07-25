@@ -15,7 +15,7 @@
 
 from trac.core import Component
 from trac.ticket.model import Ticket
-from trac.util.datefmt import format_datetime, user_time
+from trac.util.datefmt import format_datetime, user_time, utc
 
 
 class ContextService(Component):
@@ -49,6 +49,8 @@ class ContextService(Component):
                 # Check permission for this ticket
                 ticket = Ticket(self.env, ticket_id)
                 if 'TICKET_VIEW' in req.perm(ticket.resource):
+                    # Use request timezone or UTC as fallback
+                    tzinfo = getattr(req, 'tz', None) or utc
                     tickets.append({
                         'id': ticket_id,
                         'summary': row[1],
@@ -58,8 +60,8 @@ class ContextService(Component):
                         'owner': row[5],
                         'component': row[6],
                         'milestone': row[7],
-                        'created': format_datetime(row[8], tzinfo=req.tz),
-                        'modified': format_datetime(row[9], tzinfo=req.tz)
+                        'created': format_datetime(row[8], tzinfo=tzinfo),
+                        'modified': format_datetime(row[9], tzinfo=tzinfo)
                     })
         
         return tickets
@@ -108,8 +110,10 @@ class ContextService(Component):
                 
                 # Add comment if under limit
                 if len(ticket_comments) < limit:
+                    # Use request timezone or UTC as fallback
+                    tzinfo = getattr(req, 'tz', None) or utc
                     ticket_comments.append({
-                        'time': format_datetime(row[1], tzinfo=req.tz),
+                        'time': format_datetime(row[1], tzinfo=tzinfo),
                         'author': row[2],
                         'comment': row[3]
                     })
@@ -120,17 +124,18 @@ class ContextService(Component):
         
         return comments
     
-    def format_tickets_for_context(self, req, include_comments=True):
+    def format_tickets_for_context(self, req, include_comments=True, limit=20):
         """Format recent tickets into a context string for the AI.
         
         Args:
             req: The request object
             include_comments: Whether to include recent comments
+            limit: Number of tickets to retrieve (default: 20)
             
         Returns:
             Formatted string containing ticket information
         """
-        tickets = self.get_recent_tickets(req)
+        tickets = self.get_recent_tickets(req, limit)
         
         if not tickets:
             return "No tickets found in the system."
@@ -145,12 +150,21 @@ class ContextService(Component):
         context_parts = [f"Here are the {len(tickets)} most recently updated tickets:\n"]
         
         for ticket in tickets:
+            # Handle None values safely
+            description = ticket['description'] or ""
+            summary = ticket['summary'] or f"Ticket #{ticket['id']}"
+            status = ticket['status'] or "unknown"
+            priority = ticket['priority'] or "unknown"
+            owner = ticket['owner'] or "unassigned"
+            component = ticket['component'] or "unknown"
+            milestone = ticket['milestone'] or "none"
+            
             ticket_info = f"""
-Ticket #{ticket['id']}: {ticket['summary']}
-Status: {ticket['status']} | Priority: {ticket['priority']} | Owner: {ticket['owner']}
-Component: {ticket['component']} | Milestone: {ticket['milestone']}
+Ticket #{ticket['id']}: {summary}
+Status: {status} | Priority: {priority} | Owner: {owner}
+Component: {component} | Milestone: {milestone}
 Created: {ticket['created']} | Modified: {ticket['modified']}
-Description: {ticket['description'][:200]}{'...' if len(ticket['description']) > 200 else ''}
+Description: {description[:200]}{'...' if len(description) > 200 else ''}
 """
             
             # Add recent comments if available
