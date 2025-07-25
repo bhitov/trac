@@ -39,6 +39,63 @@
         $("#content .subscription-format").change(function() {
           $.setWarningUnsavedChanges(true);
         });
+        
+        // Handle Slack reconfigure button for DM
+        $("#reconfigure-slack").click(function() {
+          var $input = $("#slack_user_id");
+          var $button = $(this);
+          
+          if ($input.prop("readonly")) {
+            // Enable editing
+            $input.prop("readonly", false)
+                  .css("background-color", "")
+                  .focus();
+            $button.text(_("Done"));
+            
+            // Show hint when editing
+            if (!$button.next(".slack-hint").length) {
+              $button.after('<span class="slack-hint" style="display: block; margin-top: 5px; font-size: 0.9em; color: #666;">' +
+                           _('Find your Slack user ID by clicking your profile and selecting "Copy member ID"') + 
+                           '</span>');
+            }
+          } else {
+            // Disable editing
+            $input.prop("readonly", true)
+                  .css("background-color", "#f5f5f5");
+            $button.text(_("Reconfigure Slack"));
+            $button.next(".slack-hint").remove();
+            $.setWarningUnsavedChanges(true);
+          }
+        });
+        
+        // Handle Slack reconfigure button for Channel
+        $("#reconfigure-slack-channel").click(function() {
+          var $input = $("#slack_channel_name");
+          var $button = $(this);
+          
+          if ($input.prop("readonly")) {
+            // Enable editing
+            $input.prop("readonly", false)
+                  .css("background-color", "")
+                  .focus();
+            $button.text(_("Done"));
+            
+            // Show hint when editing
+            if (!$button.next(".slack-hint").length) {
+              $button.after('<span class="slack-hint" style="display: block; margin-top: 5px; font-size: 0.9em; color: #666;">' +
+                           _('Enter channel name with # (e.g., #general, #dev-team)') + 
+                           '</span>');
+            }
+          } else {
+            // Disable editing
+            $input.prop("readonly", true)
+                  .css("background-color", "#f5f5f5");
+            $button.text(_("Reconfigure Channel"));
+            $button.next(".slack-hint").remove();
+            $.setWarningUnsavedChanges(true);
+          }
+        });
+        
         var rows = $("#content .subscription-rules .rules");
         rows.on("click", ".delete-rule", function() {
           $(this).closest("tr").remove();
@@ -109,7 +166,11 @@
     <h2 id="subscriptions-section">${_("Subscriptions")}</h2>
     #   for distributor, rules in data['rules'].items():
     <div class="ruleset">
-      <h3>${distributor}</h3>
+      <h3>${distributor}
+      #     if distributor in data.get('distributors', {}):
+        - ${data['distributors'][distributor]['description']}
+      #     endif
+      </h3>
       #     if distributor == 'sms':
       <div class="field">
         <p>
@@ -125,6 +186,38 @@
           to receive SMS notifications.
 
           # endtrans
+        </p>
+      </div>
+      #     endif
+      #     if distributor == 'slack':
+      <div class="field slack-channel-field">
+        <p>
+          <label for="slack_channel_name">${_("Slack Channel Name:")}</label>
+          <input type="text" id="slack_channel_name" name="slack_channel_name" 
+                 value="${data.get('slack_channel_name', '#general')}"
+                 placeholder="#general"
+                 readonly="readonly"
+                 style="background-color: #f5f5f5;" />
+          <button type="button" id="reconfigure-slack-channel" class="trac-button"
+                  style="margin-left: 10px;">
+            ${_("Reconfigure Channel")}
+          </button>
+        </p>
+      </div>
+      #     endif
+      #     if distributor == 'slack-dm':
+      <div class="field slack-dm-field">
+        <p>
+          <label for="slack_user_id">${_("Slack User ID:")}</label>
+          <input type="text" id="slack_user_id" name="slack_user_id" 
+                 value="${data.get('slack_user_id', '')}"
+                 placeholder="U01234567"
+                 readonly="readonly"
+                 style="background-color: #f5f5f5;" />
+          <button type="button" id="reconfigure-slack" class="trac-button"
+                  style="margin-left: 10px;">
+            ${_("Reconfigure Slack")}
+          </button>
         </p>
       </div>
       #     endif

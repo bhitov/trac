@@ -63,6 +63,16 @@ class NotificationPreferences(Component):
             if phone_number != req.session.get('phone_number', ''):
                 req.session.set('phone_number', phone_number)
             
+            # Handle manual Slack user ID update (when OAuth not configured)
+            slack_user_id = req.args.get('slack_user_id', '').strip()
+            if slack_user_id != req.session.get('slack_user_id', ''):
+                req.session.set('slack_user_id', slack_user_id)
+                
+            # Handle Slack channel name update
+            slack_channel_name = req.args.get('slack_channel_name', '').strip()
+            if slack_channel_name != req.session.get('slack_channel_name', ''):
+                req.session.set('slack_channel_name', slack_channel_name)
+            
             action_arg = req.args.getfirst('action', '').split('_', 1)
             if len(action_arg) == 2:
                 action, arg = action_arg
@@ -115,6 +125,20 @@ class NotificationPreferences(Component):
                 default_rules[dist].append({'adverb': adverb,
                                             'description': description})
 
+        # Get distributor descriptions
+        distributors = {}
+        for distributor in self.distributors:
+            for transport in distributor.transports():
+                description = getattr(distributor, 'description', lambda t: '')(transport)
+                if not description and transport == 'slack':
+                    description = _("Slack channel notifications")
+                elif not description and transport == 'slack-dm':
+                    description = _("Slack direct message notifications")
+                distributors[transport] = {
+                    'description': description,
+                    'class': distributor.__class__.__name__
+                }
+        
         data = {
             'rules': rules,
             'subscribers': subscribers,
@@ -125,7 +149,13 @@ class NotificationPreferences(Component):
             'adverbs': ('always', 'never'),
             'adverb_labels': {'always': _("Notify"),
                               'never': _("Never notify")},
-            'phone_number': req.session.get('phone_number', '')
+            'phone_number': req.session.get('phone_number', ''),
+            'slack_user_id': req.session.get('slack_user_id', ''),
+            'slack_channel_name': req.session.get('slack_channel_name', '#general'),
+            'slack_uid': req.session.get('slack_uid', ''),
+            'slack_username': req.session.get('slack_username', ''),
+            'slack_client_id': self.config.get('notification', 'slack_client_id', ''),
+            'distributors': distributors
         }
         Chrome(self.env).add_jquery_ui(req)
         return 'prefs_notification.html', dict(data=data)
@@ -142,13 +172,14 @@ class NotificationPreferences(Component):
     # Internal methods
 
     def _add_rule(self, arg, req):
-        rule = Subscription(self.env)
+        rule = {}
         rule['sid'] = req.session.sid
         rule['authenticated'] = 1 if req.session.authenticated else 0
         rule['distributor'] = arg
         rule['format'] = req.args.get('format-%s' % arg, '')
         rule['adverb'] = req.args['new-adverb-%s' % arg]
         rule['class'] = req.args['new-rule-%s' % arg]
+        
         Subscription.add(self.env, rule)
 
     def _delete_rule(self, arg, req):
