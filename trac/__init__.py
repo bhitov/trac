@@ -17,3 +17,11 @@ try:
     __version__ = get_distribution('Trac').version
 except DistributionNotFound:
     __version__ = '1.7.1'
+
+# Import auth modules to ensure component registration
+try:
+    from . import auth
+    # Force import of clerk module for component discovery
+    from .auth import clerk
+except ImportError:
+    pass
