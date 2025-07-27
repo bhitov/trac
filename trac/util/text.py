@@ -22,7 +22,7 @@ import base64
 import configparser
 import locale
 import os
-import pkg_resources
+from packaging.version import Version
 import re
 import sys
 import textwrap
@@ -44,9 +44,9 @@ del Empty # shouldn't be used outside of Trac core
 
 # -- Jinja2
 
-_jinja2_ver = pkg_resources.parse_version(jinja2.__version__)
+_jinja2_ver = Version(jinja2.__version__)
 _jinja2_exts = ['jinja2.ext.do', 'jinja2.ext.i18n']
-if _jinja2_ver < pkg_resources.parse_version('3'):
+if _jinja2_ver < Version('3'):
     _jinja2_exts.append('jinja2.ext.with_')
 
 def jinja2env(**kwargs):

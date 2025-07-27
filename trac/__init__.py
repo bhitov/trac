@@ -11,11 +11,17 @@
 # individuals. For the exact contribution history, see the revision
 # history and logs, available at https://trac.edgewall.org/log/.
 
-from pkg_resources import DistributionNotFound, get_distribution
+try:
+    from importlib.metadata import version, PackageNotFoundError
+except ImportError:
+    # Python < 3.8 fallback
+    from pkg_resources import get_distribution, DistributionNotFound as PackageNotFoundError
+    def version(name):
+        return get_distribution(name).version
 
 try:
-    __version__ = get_distribution('Trac').version
-except DistributionNotFound:
+    __version__ = version('Trac')
+except PackageNotFoundError:
     __version__ = '1.7.1'
 
 # Import auth modules to ensure component registration
