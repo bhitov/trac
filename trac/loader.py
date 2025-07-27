@@ -17,9 +17,18 @@
 from glob import glob
 import importlib.util
 import os.path
-import pkg_resources
-from pkg_resources import working_set, DistributionNotFound, \
-                          VersionConflict, UnknownExtra
+try:
+    from importlib.metadata import distributions, PackageNotFoundError
+    from importlib.metadata import entry_points
+    # For compatibility with pkg_resources API
+    import pkg_resources
+    from pkg_resources import working_set, DistributionNotFound, \
+                              VersionConflict, UnknownExtra
+except ImportError:
+    # Python < 3.8 fallback
+    import pkg_resources
+    from pkg_resources import working_set, DistributionNotFound, \
+                              VersionConflict, UnknownExtra
 import sys
 
 from trac.core import ComponentMeta

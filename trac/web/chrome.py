@@ -27,7 +27,14 @@ import datetime
 import itertools
 import operator
 import os.path
-import pkg_resources
+try:
+    from importlib.resources import files
+    def resource_filename(package, resource):
+        return str(files(package) / resource)
+except ImportError:
+    # Python < 3.9 fallback
+    import pkg_resources
+    resource_filename = pkg_resources.resource_filename
 import pprint
 import re
 from functools import partial
@@ -740,7 +747,7 @@ class Chrome(Component):
     # ITemplateProvider methods
 
     def get_htdocs_dirs(self):
-        return [('common', pkg_resources.resource_filename('trac', 'htdocs')),
+        return [('common', resource_filename('trac', 'htdocs')),
                 ('shared', self.shared_htdocs_dir),
                 ('site', self.env.htdocs_dir)]
 
@@ -748,7 +755,7 @@ class Chrome(Component):
         return list(filter(None, [
             self.env.templates_dir,
             self.shared_templates_dir,
-            pkg_resources.resource_filename('trac', 'templates'),
+            resource_filename('trac', 'templates'),
         ]))
 
     # IWikiSyntaxProvider methods

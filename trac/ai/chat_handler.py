@@ -411,8 +411,13 @@ When answering questions:
     
     def get_templates_dirs(self):
         """Return the templates directory."""
-        from pkg_resources import resource_filename
-        return [resource_filename('trac.ai', 'templates')]
+        try:
+            from importlib.resources import files
+            return [str(files('trac.ai') / 'templates')]
+        except ImportError:
+            # Python < 3.9 fallback
+            from pkg_resources import resource_filename
+            return [resource_filename('trac.ai', 'templates')]
     
     # IPermissionRequestor methods
     def get_permission_actions(self):

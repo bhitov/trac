@@ -20,7 +20,10 @@ import io
 from configparser import ParsingError, RawConfigParser
 from collections import defaultdict
 from functools import partial
-from pkg_resources import resource_filename
+try:
+    from importlib.resources import files
+except ImportError:
+    from pkg_resources import resource_filename
 
 from trac.api import IEnvironmentSetupParticipant
 from trac.config import ConfigSection, Configuration, ConfigurationError
@@ -109,7 +112,13 @@ def load_workflow_config_snippet(config, filename):
     """Loads the ticket-workflow section from the given file (expected to be in
     the 'workflows' tree) into the provided config.
     """
-    filename = resource_filename('trac.ticket', 'workflows/%s' % filename)
+    try:
+        # Use importlib.resources for Python 3.9+
+        workflow_files = files('trac.ticket') / 'workflows'
+        filename = str(workflow_files / filename)
+    except NameError:
+        # Fallback to pkg_resources for older Python versions
+        filename = resource_filename('trac.ticket', 'workflows/%s' % filename)
     new_config = Configuration(filename)
     for name, value in new_config.options('ticket-workflow'):
         config.set('ticket-workflow', name, value)

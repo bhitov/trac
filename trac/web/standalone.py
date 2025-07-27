@@ -23,7 +23,13 @@ import argparse
 import functools
 import importlib
 import os
-import pkg_resources
+try:
+    from importlib.metadata import version, PackageNotFoundError
+except ImportError:
+    # Python < 3.8 fallback
+    from pkg_resources import get_distribution, DistributionNotFound as PackageNotFoundError
+    def version(name):
+        return get_distribution(name).version
 import socket
 import ssl
 import sys
@@ -391,5 +397,10 @@ def main():
 
 
 if __name__ == '__main__':
-    pkg_resources.require('Trac==%s' % VERSION)
+    try:
+        installed_version = version('Trac')
+        if installed_version != VERSION:
+            print(f"Warning: Installed Trac version {installed_version} does not match expected version {VERSION}")
+    except PackageNotFoundError:
+        pass  # Trac package not found in metadata, skip version check
     main()

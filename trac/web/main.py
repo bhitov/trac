@@ -22,7 +22,11 @@ import gc
 import io
 import locale
 import os
-import pkg_resources
+try:
+    from importlib.resources import files
+except ImportError:
+    # Python < 3.9 fallback
+    import pkg_resources
 from pprint import pformat, pprint
 import re
 import sys
@@ -307,7 +311,10 @@ class RequestDispatcher(Component):
         return []
 
     def get_templates_dirs(self):
-        return [pkg_resources.resource_filename('trac.web', 'templates')]
+        try:
+            return [str(files('trac.web') / 'templates')]
+        except NameError:
+            return [pkg_resources.resource_filename('trac.web', 'templates')]
 
     # Internal methods
 
@@ -807,7 +814,10 @@ def send_project_index(environ, start_response, parent_dir=None,
                        env_paths=None):
     req = Request(environ, start_response)
 
-    loadpaths = [pkg_resources.resource_filename('trac', 'templates')]
+    try:
+        loadpaths = [str(files('trac') / 'templates')]
+    except NameError:
+        loadpaths = [pkg_resources.resource_filename('trac', 'templates')]
     if req.environ.get('trac.env_index_template'):
         env_index_template = req.environ['trac.env_index_template']
         tmpl_path, template = os.path.split(env_index_template)

@@ -96,10 +96,16 @@ class PageRenderingTestCase(unittest.TestCase):
         module = ChatHandler(self.env)
         template, data, content_type = module.process_request(req)
         
-        # Check template exists
-        chrome = Chrome(self.env)
-        template_path = chrome.get_template_info(template)[1]
-        self.assertTrue(os.path.exists(template_path))
+        # Check template exists by using the handler's template directories
+        template_found = False
+        template_path = None
+        for template_dir in module.get_templates_dirs():
+            potential_path = os.path.join(template_dir, template)
+            if os.path.exists(potential_path):
+                template_found = True
+                template_path = potential_path
+                break
+        self.assertTrue(template_found, f"Template {template} not found in {module.get_templates_dirs()}")
         
         # Read template content to verify structure
         with open(template_path, 'r') as f:

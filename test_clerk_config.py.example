@@ -1,0 +1,11 @@
+# Copy this file to test_clerk_config.py and fill in your test values
+# test_clerk_config.py is gitignored
+
+# Clerk test configuration for functional tests
+CLERK_TEST_CONFIG = {
+    'secret_key': 'sk_test_YOUR_SECRET_KEY_HERE',
+    'publishable_key': 'pk_test_YOUR_PUBLISHABLE_KEY_HERE',
+    'test_token': 'your_test_token_here',  # Development token like dvb_xxxxx
+    'test_jwt': 'your_jwt_token_here',     # Full JWT token for more realistic tests
+    'debug': True
+}
