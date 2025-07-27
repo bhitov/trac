@@ -315,7 +315,8 @@ class WikiAPITestCase(unittest.TestCase):
 
 def test_suite():
     suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(WikiAPITestCase))
+    loader = unittest.TestLoader()
+    suite.addTest(loader.loadTestsFromTestCase(WikiAPITestCase))
     return suite
 
 

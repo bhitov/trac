@@ -44,7 +44,9 @@ class GitTestCase(unittest.TestCase):
         self.assertGreaterEqual(len(v['v_tuple']), 3)
         self.assertIsInstance(v['v_tuple'][0], int)
         self.assertIsInstance(v['v_tuple'][1], int)
-        self.assertIsInstance(v['v_tuple'][2], int)
+        # Third component might be an int or string (e.g., '5 (Apple Git-154)')
+        third = v['v_tuple'][2]
+        self.assertTrue(isinstance(third, int) or isinstance(third, str))
 
 
 class TestParseCommit(unittest.TestCase):

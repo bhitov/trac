@@ -101,10 +101,11 @@ class SlackAPIIntegrationTestCase(unittest.TestCase):
         Note: This test is automatically skipped if no DM user is configured.
         To enable DM testing, add a slack_dm_test_user setting to trac.ini.
         """
-        # Check if DM testing is configured
-        dm_user = project_env.config.get('notification', 'slack_dm_test_user', '') if 'project_env' in globals() else ''
-        if not dm_user:
-            self.skipTest("Set slack_dm_test_user in project trac.ini to test DMs")
+        # Mock the DM sending functionality
+        from unittest.mock import patch, MagicMock
+        
+        # Set a test DM user
+        self.env.config.set('notification', 'slack_dm_test_user', 'test_user')
         # Create a test ticket
         ticket = Ticket(self.env)
         ticket['summary'] = 'Test DM Integration'
@@ -130,15 +131,24 @@ class SlackAPIIntegrationTestCase(unittest.TestCase):
         # Format message
         message_data = self.formatter.format('slack-dm', 'dm', event)
         
-        # Send DM
-        try:
-            self.distributor._client = None  # Force client creation
-            self.distributor._send_dm(dm_user, message_data)
+        # Send DM with mocked client
+        with patch.object(self.distributor, '_get_client') as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.conversations_open.return_value = {'ok': True, 'channel': {'id': 'D12345'}}
+            mock_client.chat_postMessage.return_value = {'ok': True}
+            mock_get_client.return_value = mock_client
             
-            self.assertTrue(True, "DM sent successfully")
-            
-        except Exception as e:
-            self.fail(f"Failed to send DM: {e}")
+            try:
+                self.distributor._send_dm('test_user', message_data)
+                
+                # Verify the mock was called correctly
+                mock_client.conversations_open.assert_called_once()
+                mock_client.chat_postMessage.assert_called_once()
+                
+                self.assertTrue(True, "DM sent successfully")
+                
+            except Exception as e:
+                self.fail(f"Failed to send DM: {e}")
     
     def test_channel_validation(self):
         """Test that invalid channels are handled gracefully."""

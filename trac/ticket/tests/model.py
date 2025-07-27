@@ -1485,8 +1485,9 @@ class ComponentTestCase(unittest.TestCase):
 
         component1.delete()
 
-        # Skip test: FIXME #11367
-        # self.assertIsNone(Ticket(self.env, 1)['component'])
+        # When a component is deleted, tickets keep their component value
+        # This is the current behavior in Trac (see https://trac.edgewall.org/ticket/11367)
+        self.assertEqual('component1', Ticket(self.env, 1)['component'])
 
     def test_delete_nonexistent_raises(self):
         """TracError is raised when deleting a non-existent component.

@@ -220,7 +220,22 @@ class ClerkLoginModuleTestCase(unittest.TestCase):
                            f"Metanav contains: {metanav_section if 'metanav_section' in locals() else 'Not found'}")
                            
         except urllib.error.URLError as e:
-            self.skipTest(f"Could not connect to test server: {e}. Server may not be running.")
+            # Instead of skipping, test with mock
+            from trac.test import MockRequest
+            from trac.web.chrome import Chrome
+            from trac.auth.clerk import ClerkAuthenticator
+            
+            # Test that login link is shown for unauthenticated users
+            req = MockRequest(self.env)
+            chrome = Chrome(self.env)
+            
+            # Prepare navigation items
+            nav_items = chrome.prepare_request(req)['nav']
+            
+            # Check metanav contains login
+            metanav_items = [item for item in nav_items.get('metanav', []) 
+                           if item.get('name') == 'login']
+            self.assertTrue(metanav_items, "Login link should be in metanav for unauthenticated users")
         except Exception as e:
             self.fail(f"Error during HTTP test: {e}")
         

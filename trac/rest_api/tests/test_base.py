@@ -338,7 +338,8 @@ class MockPermissions:
 
 def test_suite():
     suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(BaseRESTHandlerTestCase))
+    loader = unittest.TestLoader()
+    suite.addTest(loader.loadTestsFromTestCase(BaseRESTHandlerTestCase))
     return suite
 
 

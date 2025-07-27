@@ -62,57 +62,54 @@ class PageRenderingTestCase(unittest.TestCase):
         self.assertTrue(template_found, "ai_chat.html template should exist")
     
     def test_live_server_rendering(self):
-        """Test that the AI page renders on the live server."""
-        # Skip if server isn't running
-        try:
-            response = requests.get('http://localhost:9876/myproject/ai', timeout=1)
-        except requests.exceptions.ConnectionError:
-            self.skipTest("Server not running")
+        """Test that the AI page renders correctly using mock request."""
+        from trac.test import MockRequest
+        from trac.web.chrome import Chrome
+        from trac.ai.chat_handler import ChatHandler
         
-        # Check response
-        self.assertEqual(response.status_code, 200, 
-                        f"Expected 200, got {response.status_code}")
+        # Create mock request
+        req = MockRequest(self.env, path_info='/ai')
         
-        # Check that key elements are present
-        self.assertIn('AI Ticket Assistant', response.text)
-        self.assertIn('chat-messages', response.text)
-        self.assertIn('chat-input', response.text)
-        self.assertIn('send-button', response.text)
+        # Process request
+        module = ChatHandler(self.env)
+        self.assertTrue(module.match_request(req))
+        template, data, content_type = module.process_request(req)
         
-        # Check that JavaScript is included
-        self.assertIn('jQuery(function($)', response.text)
-        self.assertIn('sendMessage', response.text)
+        # Check template and data
+        self.assertEqual(template, 'ai_chat.html')
+        self.assertIn('api_configured', data)
+        self.assertIn('model', data)
         
-        # Check model is displayed
-        self.assertIn('gpt-3.5-turbo', response.text)
+        # Check model is set correctly
+        self.assertEqual(data['model'], 'gpt-3.5-turbo')
     
     def test_page_structure(self):
-        """Test that the rendered page has the correct structure."""
-        try:
-            response = requests.get('http://localhost:9876/myproject/ai', timeout=1)
-        except requests.exceptions.ConnectionError:
-            self.skipTest("Server not running")
+        """Test that the rendered page template has the correct structure."""
+        from trac.test import MockRequest
+        from trac.web.chrome import Chrome
+        from trac.ai.chat_handler import ChatHandler
         
-        # Use BeautifulSoup to parse if available
-        try:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(response.text, 'html.parser')
+        # Create mock request
+        req = MockRequest(self.env, path_info='/ai')
+        
+        # Process request
+        module = ChatHandler(self.env)
+        template, data, content_type = module.process_request(req)
+        
+        # Check template exists
+        chrome = Chrome(self.env)
+        template_path = chrome.get_template_info(template)[1]
+        self.assertTrue(os.path.exists(template_path))
+        
+        # Read template content to verify structure
+        with open(template_path, 'r') as f:
+            content = f.read()
             
-            # Check main structure
-            self.assertIsNotNone(soup.find('div', id='chat-messages'))
-            self.assertIsNotNone(soup.find('input', id='chat-input'))
-            self.assertIsNotNone(soup.find('button', id='send-button'))
-            
-            # Check title
-            title = soup.find('title')
-            self.assertIsNotNone(title)
-            self.assertIn('AI Assistant', title.text)
-            
-        except ImportError:
-            # Basic checks without BeautifulSoup
-            self.assertIn('<div id="chat-messages"', response.text)
-            self.assertIn('<input type="text" id="chat-input"', response.text)
-            self.assertIn('<button id="send-button"', response.text)
+        # Check main elements exist in template
+        self.assertIn('chat-messages', content)
+        self.assertIn('chat-input', content)
+        self.assertIn('send-button', content)
+        self.assertIn('AI Ticket Assistant', content)
 
 
 def test_suite():

@@ -359,7 +359,8 @@ class TicketsAPITestCase(unittest.TestCase):
         self.assertEqual(response_data['offset'], 1)
         self.assertEqual(response_data['count'], 3)  # Total count
     
-    def skip_test_custom_fields(self):
+    def test_custom_fields(self):
+        self.skipTest("Custom fields not fully implemented in REST API yet")
         """Test handling of custom fields."""
         # Add a custom field to Trac config
         self.env.config.set('ticket-custom', 'mycustom', 'text')
@@ -423,7 +424,8 @@ class TicketsAPITestCase(unittest.TestCase):
 
 def test_suite():
     suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(TicketsAPITestCase))
+    loader = unittest.TestLoader()
+    suite.addTest(loader.loadTestsFromTestCase(TicketsAPITestCase))
     return suite
 
 
