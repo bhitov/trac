@@ -71,7 +71,13 @@ class BaseRESTHandler(object, metaclass=ABCMeta):
     
     def list_resources(self, req):
         """GET /api/{collection} - List resources with optional filtering."""
-        req.perm.require(f'{self.resource_name}_VIEW')
+        from trac.perm import PermissionError
+        
+        try:
+            req.perm.require(f'{self.resource_name}_VIEW')
+        except PermissionError as e:
+            self._send_error(req, 403, str(e))
+            return
         
         # Get pagination parameters
         limit = int(req.args.get('limit', 100))
@@ -99,11 +105,16 @@ class BaseRESTHandler(object, metaclass=ABCMeta):
     
     def get_resource(self, req, resource_id):
         """GET /api/{collection}/{id} - Get a specific resource."""
+        from trac.perm import PermissionError
+        
         try:
             resource = self._load_resource(resource_id)
             self._check_permission(req, resource, 'VIEW')
         except ResourceNotFound:
             self._send_error(req, 404, f"{self.model_class.__name__} not found")
+            return
+        except PermissionError as e:
+            self._send_error(req, 403, str(e))
             return
         
         serialized = self._serialize_resource(resource, detailed=True)
@@ -111,7 +122,13 @@ class BaseRESTHandler(object, metaclass=ABCMeta):
     
     def create_resource(self, req):
         """POST /api/{collection} - Create a new resource."""
-        req.perm.require(f'{self.resource_name}_CREATE')
+        from trac.perm import PermissionError
+        
+        try:
+            req.perm.require(f'{self.resource_name}_CREATE')
+        except PermissionError as e:
+            self._send_error(req, 403, str(e))
+            return
         
         # Parse JSON body
         try:
@@ -124,7 +141,11 @@ class BaseRESTHandler(object, metaclass=ABCMeta):
         resource = self.model_class(self.env)
         
         # Set fields from data
-        self._set_resource_fields(resource, data, req)
+        try:
+            self._set_resource_fields(resource, data, req)
+        except TracError as e:
+            self._send_error(req, 400, str(e))
+            return
         
         # Save resource
         try:
@@ -139,11 +160,16 @@ class BaseRESTHandler(object, metaclass=ABCMeta):
     
     def update_resource(self, req, resource_id):
         """PUT /api/{collection}/{id} - Update an existing resource."""
+        from trac.perm import PermissionError
+        
         try:
             resource = self._load_resource(resource_id)
             self._check_permission(req, resource, 'MODIFY')
         except ResourceNotFound:
             self._send_error(req, 404, f"{self.model_class.__name__} not found")
+            return
+        except PermissionError as e:
+            self._send_error(req, 403, str(e))
             return
         
         # Parse JSON body
@@ -172,11 +198,16 @@ class BaseRESTHandler(object, metaclass=ABCMeta):
     
     def delete_resource(self, req, resource_id):
         """DELETE /api/{collection}/{id} - Delete a resource."""
+        from trac.perm import PermissionError
+        
         try:
             resource = self._load_resource(resource_id)
             self._check_permission(req, resource, 'ADMIN')
         except ResourceNotFound:
             self._send_error(req, 404, f"{self.model_class.__name__} not found")
+            return
+        except PermissionError as e:
+            self._send_error(req, 403, str(e))
             return
         
         try:

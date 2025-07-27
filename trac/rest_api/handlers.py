@@ -52,8 +52,28 @@ class RestApiHandler(Component):
             from trac.rest_api.wiki import WikiAPI
             handler = WikiAPI(self.env)
             return handler.handle_request(req, resource_id)
+        elif resource_type == 'milestone':
+            from trac.rest_api.milestones import MilestonesAPI
+            handler = MilestonesAPI(self.env)
+            return handler.handle_request(req, resource_id)
+        elif resource_type == 'component':
+            from trac.rest_api.components import ComponentsAPI
+            handler = ComponentsAPI(self.env)
+            return handler.handle_request(req, resource_id)
+        elif resource_type == 'version':
+            from trac.rest_api.versions import VersionsAPI
+            handler = VersionsAPI(self.env)
+            return handler.handle_request(req, resource_id)
+        elif resource_type == 'search':
+            from trac.rest_api.search import SearchAPI
+            handler = SearchAPI(self.env)
+            return handler.handle_request(req, resource_id)
+        elif resource_type == 'timeline':
+            from trac.rest_api.timeline import TimelineAPI
+            handler = TimelineAPI(self.env)
+            return handler.handle_request(req, resource_id)
         
-        # More API handlers will be added here for milestones, etc.
+        # All planned API handlers have been implemented
         
         # If no handler found, return 404
         self._send_json_error(req, 404, "API endpoint not found")

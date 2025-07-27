@@ -158,6 +158,10 @@ class TicketsAPI(BaseRESTHandler):
     
     def _set_resource_fields(self, ticket, data, req):
         """Set fields on a new ticket from request data."""
+        # Validate required fields
+        if not data.get('summary'):
+            raise TracError("Summary is required")
+        
         # Set required fields
         ticket['summary'] = data.get('summary', '')
         ticket['description'] = data.get('description', '')

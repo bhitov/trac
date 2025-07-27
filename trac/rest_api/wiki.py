@@ -13,6 +13,7 @@
 
 """REST API for Wiki - provides CRUD operations on wiki pages via JSON API."""
 
+import json
 from datetime import datetime
 
 from trac.core import TracError
@@ -129,6 +130,8 @@ class WikiAPI(BaseRESTHandler):
     
     def get_resource(self, req, resource_id):
         """Override to handle non-existent pages."""
+        from trac.perm import PermissionError
+        
         try:
             resource = self._load_resource(resource_id)
         except TracError:
@@ -140,7 +143,11 @@ class WikiAPI(BaseRESTHandler):
             self._send_error(req, 404, "Wiki page not found")
             return
         
-        self._check_permission(req, resource, 'VIEW')
+        try:
+            self._check_permission(req, resource, 'VIEW')
+        except PermissionError as e:
+            self._send_error(req, 403, str(e))
+            return
         
         serialized = self._serialize_resource(resource, detailed=True)
         self._send_json_response(req, 200, serialized)
@@ -151,8 +158,12 @@ class WikiAPI(BaseRESTHandler):
     
     def handle_request(self, req, resource_id):
         """Override to handle special wiki endpoints."""
+        # Handle POST to create a specific page
+        if req.method == 'POST' and resource_id:
+            # Creating a new page with a specific name
+            return self._create_page(req, resource_id)
         # Handle version history endpoint
-        if resource_id and resource_id.endswith('/history'):
+        elif resource_id and resource_id.endswith('/history'):
             page_name = resource_id[:-8]  # Remove '/history'
             return self._get_page_history(req, page_name)
         elif resource_id and '/versions/' in resource_id:
@@ -189,6 +200,36 @@ class WikiAPI(BaseRESTHandler):
         }
         
         self._send_json_response(req, 200, response_data)
+    
+    def _create_page(self, req, page_name):
+        """Create a new wiki page with POST."""
+        req.perm.require('WIKI_CREATE')
+        
+        # Parse JSON body
+        try:
+            data = json.loads(req.read().decode('utf-8'))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            self._send_error(req, 400, f"Invalid JSON: {e}")
+            return
+            
+        # Create new page
+        page = WikiPage(self.env, page_name)
+        if page.exists:
+            self._send_error(req, 409, f"Page '{page_name}' already exists")
+            return
+            
+        # Set fields
+        self._set_resource_fields(page, data, req)
+        
+        # Save the page
+        try:
+            self._save_new_resource(page, req)
+        except TracError as e:
+            self._send_error(req, 400, str(e))
+            return
+            
+        # Return created page
+        self._send_json_response(req, 201, self._serialize_resource(page, detailed=True))
     
     def _get_page_version(self, req, page_name, version):
         """GET /api/wiki/{page}/versions/{version} - Get specific version."""
