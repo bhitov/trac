@@ -13,7 +13,24 @@
 
 """Utilities for text translation with gettext."""
 
-import pkg_resources
+try:
+    from importlib.resources import files
+    def resource_filename(package, resource):
+        return str(files(package) / resource)
+    def resource_listdir(package, resource):
+        return [p.name for p in (files(package) / resource).iterdir()]
+    def resource_exists(package, resource):
+        try:
+            files(package) / resource
+            return True
+        except (FileNotFoundError, AttributeError):
+            return False
+except ImportError:
+    # Python < 3.9 fallback
+    import pkg_resources
+    resource_filename = pkg_resources.resource_filename
+    resource_listdir = pkg_resources.resource_listdir
+    resource_exists = pkg_resources.resource_exists
 import re
 
 from trac.util.concurrency import ThreadLocal, threading
@@ -139,7 +156,7 @@ try:
 
         def activate(self, locale, env_path=None):
             try:
-                locale_dir = pkg_resources.resource_filename('trac', 'locale')
+                locale_dir = resource_filename('trac', 'locale')
             except Exception:
                 self._activate_failed = True
                 return
@@ -343,9 +360,9 @@ try:
         """
         try:
             locales = [dirname for dirname
-                       in pkg_resources.resource_listdir('trac', 'locale')
+                       in resource_listdir('trac', 'locale')
                        if '.' not in dirname
-                       and pkg_resources.resource_exists(
+                       and resource_exists(
                         'trac', 'locale/%s/LC_MESSAGES/messages.mo' % dirname)]
             return locales
         except Exception:

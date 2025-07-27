@@ -660,6 +660,12 @@ if selenium:
         def get_cookies(self):
             return iter(self.driver.get_cookies())
 
+        def set_cookie(self, name, value, **kwargs):
+            """Add a cookie to the current session"""
+            cookie_dict = {'name': name, 'value': value}
+            cookie_dict.update(kwargs)
+            self.driver.add_cookie(cookie_dict)
+
         def get_url(self):
             return self.driver.current_url
 
@@ -688,6 +694,10 @@ else:
                 return wrapper
             return decorator
 
+        def set_cookie(self, name, value, **kwargs):
+            """Fallback cookie setting (no-op for non-selenium mode)"""
+            pass
+
 
 b = tc = Proxy()
 
@@ -707,7 +717,16 @@ class ReverseProxyServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
     def get_connection(self):
         conn = http.client.HTTPConnection('127.0.0.1', self.proxy_port)
-        conn.connect()
+        # Retry connection with exponential backoff to handle timing issues
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                conn.connect()
+                return conn
+            except ConnectionRefusedError:
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(0.1 * (2 ** attempt))  # exponential backoff: 0.1, 0.2, 0.4 seconds
         return conn
 
     def get_response(self, path):
@@ -717,6 +736,8 @@ class ReverseProxyServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
     def save_response(self, path, body):
         filename = self._response_path(path)
+        # Ensure the response directory exists
+        os.makedirs(self.response_dir, exist_ok=True)
         if isinstance(body, bytes):
             body = [body]
         with open(filename, 'wb') as f:
@@ -732,7 +753,15 @@ class ReverseProxyRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def _do(self):
         self.server.save_response(self.path, b'')
-        conn = self.server.get_connection()
+        try:
+            conn = self.server.get_connection()
+        except ConnectionRefusedError:
+            # If we can't get a connection, return 503 Service Unavailable
+            self.send_response(503, 'Service Temporarily Unavailable')
+            self.end_headers()
+            self.close_connection = True
+            return
+        
         try:
             conn.putrequest(self.command, self.path, skip_host=True,
                             skip_accept_encoding=True)

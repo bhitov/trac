@@ -24,10 +24,7 @@ from email.header import (
     make_header as _email_make_header,
 )
 
-try:
-    from ._aiosmtpd import SMTPThreadedServer
-except ImportError:
-    from ._smtpd import SMTPThreadedServer
+from ._aiosmtpd import SMTPThreadedServer
 
 from trac.config import ConfigurationError
 from trac.notification import SendmailEmailSender, SmtpEmailSender

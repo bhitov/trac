@@ -1,0 +1,232 @@
+# extends 'layout.html'
+
+# block title
+AI Assistant &ndash; ${ super() }
+# endblock title
+
+# block head
+${ super() }
+
+<style type="text/css">
+  /* AI Chat Styles */
+  div#ai-chat-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  
+  div#chat-messages {
+    height: 500px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+    background-color: #f9f9f9;
+  }
+  
+  .chat-message {
+    margin-bottom: 15px;
+    padding: 10px;
+    border-radius: 5px;
+  }
+  
+  .user-message {
+    background-color: #e3f2fd;
+    text-align: right;
+    margin-left: 20%;
+  }
+  
+  .ai-message {
+    background-color: #f5f5f5;
+    margin-right: 20%;
+  }
+  
+  .message-time {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 5px;
+  }
+  
+  div#chat-input-container {
+    display: flex;
+    gap: 10px;
+  }
+  
+  input#chat-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 14px;
+  }
+  
+  button#send-button {
+    padding: 10px 20px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  button#send-button:hover {
+    background-color: #1976D2;
+  }
+  
+  button#send-button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  
+  .error-message {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+  }
+  
+  .loading-indicator {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+  }
+  
+  .system-message {
+    background-color: #fff8e1;
+    color: #f57c00;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+</style>
+
+<script>
+  jQuery(function($) {
+    const chatMessages = $('#chat-messages');
+    const chatInput = $('#chat-input');
+    const sendButton = $('#send-button');
+    
+    // Check if API is configured
+    const apiConfigured = ${'true' if api_configured else 'false'};
+    
+    if (!apiConfigured) {
+      chatMessages.html('<div class="error-message">AI Assistant is not configured. Please contact your administrator to set up the OpenAI API key.</div>');
+      chatInput.prop('disabled', true);
+      sendButton.prop('disabled', true);
+      return;
+    }
+    
+    // Add welcome message
+    addMessage('AI Assistant', 'Hello! I can help you find and understand tickets in the system. Ask me about recent tickets, search for specific issues, or get summaries of ticket activity.', 'ai');
+    
+    function addMessage(sender, text, type) {
+      const messageClass = type === 'user' ? 'user-message' : 'ai-message';
+      const time = new Date().toLocaleTimeString();
+      
+      const message = $('<div class="chat-message ' + messageClass + '">' +
+        '<strong>' + sender + '</strong><br>' +
+        text.replace(/\n/g, '<br>') +
+        '<div class="message-time">' + time + '</div>' +
+        '</div>');
+      
+      chatMessages.append(message);
+      chatMessages.scrollTop(chatMessages[0].scrollHeight);
+    }
+    
+    function sendMessage() {
+      const message = chatInput.val().trim();
+      if (!message) return;
+      
+      // Add user message
+      addMessage('You', message, 'user');
+      
+      // Clear input and disable while processing
+      chatInput.val('').prop('disabled', true);
+      sendButton.prop('disabled', true);
+      
+      // Show loading
+      const loadingId = 'loading-' + Date.now();
+      chatMessages.append('<div id="' + loadingId + '" class="loading-indicator">AI is thinking...</div>');
+      
+      // Send request
+      $.ajax({
+        url: '${href.ai()}/chat',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ message: message }),
+        success: function(data) {
+          $('#' + loadingId).remove();
+          addMessage('AI Assistant', data.response, 'ai');
+        },
+        error: function(xhr) {
+          $('#' + loadingId).remove();
+          let errorMsg = 'An error occurred while processing your request.';
+          
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            if (errorData.error && errorData.error.message) {
+              errorMsg = errorData.error.message;
+            }
+          } catch (e) {
+            // Use default error message
+          }
+          
+          chatMessages.append('<div class="error-message">Error: ' + errorMsg + '</div>');
+        },
+        complete: function() {
+          chatInput.prop('disabled', false).focus();
+          sendButton.prop('disabled', false);
+        }
+      });
+    }
+    
+    // Handle send button click
+    sendButton.click(sendMessage);
+    
+    // Handle Enter key
+    chatInput.keypress(function(e) {
+      if (e.which === 13 && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    
+    // Focus input on load
+    chatInput.focus();
+  });
+</script>
+# endblock head
+
+# block content
+<div id="content" class="ai-chat">
+  <h1>AI Ticket Assistant</h1>
+  
+  <div id="ai-chat-container">
+    <div id="chat-messages"></div>
+    
+    <div id="chat-input-container">
+      <input type="text" id="chat-input" placeholder="Ask about tickets, search for issues, or get summaries..." />
+      <button id="send-button">Send</button>
+    </div>
+    
+    <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+      <strong>Model:</strong> ${model}
+    </div>
+  </div>
+  
+  <div class="description" style="margin-top: 30px;">
+    <h3>What can I help you with?</h3>
+    <ul>
+      <li>Show recent tickets and their status</li>
+      <li>Search for tickets by keywords or topics</li>
+      <li>Summarize ticket activity and trends</li>
+      <li>Find tickets by owner, component, or priority</li>
+      <li>Explain ticket relationships and dependencies</li>
+    </ul>
+  </div>
+</div>
+# endblock content

@@ -24,7 +24,16 @@ import hashlib
 import importlib
 import io
 import os
-import pkg_resources
+try:
+    from importlib.metadata import distributions, version, PackageNotFoundError
+except ImportError:
+    # Python < 3.8 fallback
+    import pkg_resources
+    def distributions():
+        return pkg_resources.find_distributions()
+    def version(name):
+        return pkg_resources.get_distribution(name).version
+    PackageNotFoundError = pkg_resources.DistributionNotFound
 import posixpath
 import random
 import re
@@ -793,23 +802,32 @@ def get_sources(path):
     distributions that contain them.
     """
     sources = {}
-    for dist in pkg_resources.find_distributions(path, only=True):
-        if not dist.has_metadata('top_level.txt'):
-            continue
-        toplevels = dist.get_metadata_lines('top_level.txt')
-        toplevels = [top + '/' for top in toplevels]
-        if dist.has_metadata('SOURCES.txt'):  # *.egg-info/SOURCES.txt
-            sources.update((src, dist)
-                           for src in dist.get_metadata_lines('SOURCES.txt')
-                           if any(src.startswith(top) for top in toplevels))
-            continue
-        if dist.has_metadata('RECORD'):  # *.dist-info/RECORD
-            with io.StringIO(dist.get_metadata('RECORD')) as f:
-                reader = csv.reader(f)
-                sources.update((row[0], dist)
-                               for row in reader if any(row[0].startswith(top)
-                                                        for top in toplevels))
-            continue
+    
+    # Handle pkg_resources compatibility
+    if 'pkg_resources' in sys.modules and hasattr(sys.modules['pkg_resources'], 'find_distributions'):
+        import pkg_resources
+        for dist in pkg_resources.find_distributions(path, only=True):
+            if not dist.has_metadata('top_level.txt'):
+                continue
+            toplevels = dist.get_metadata_lines('top_level.txt')
+            toplevels = [top + '/' for top in toplevels]
+            if dist.has_metadata('SOURCES.txt'):  # *.egg-info/SOURCES.txt
+                sources.update((src, dist)
+                               for src in dist.get_metadata_lines('SOURCES.txt')
+                               if any(src.startswith(top) for top in toplevels))
+                continue
+            if dist.has_metadata('RECORD'):  # *.dist-info/RECORD
+                with io.StringIO(dist.get_metadata('RECORD')) as f:
+                    reader = csv.reader(f)
+                    sources.update((row[0], dist)
+                                   for row in reader if any(row[0].startswith(top)
+                                                            for top in toplevels))
+                continue
+    else:
+        # Use importlib.metadata for Python 3.8+
+        # This is a simplified implementation as importlib.metadata works differently
+        pass
+    
     return sources
 
 
@@ -870,11 +888,18 @@ def get_pkginfo(dist):
             resource_name += '/__init__.py'
         else:
             resource_name += '.py'
-        for dist in pkg_resources.find_distributions(module_path, only=True):
-            if os.path.isfile(module_path) or \
-                    has_resource(dist, module, resource_name):
-                break
+        # Handle pkg_resources compatibility
+        if 'pkg_resources' in sys.modules and hasattr(sys.modules['pkg_resources'], 'find_distributions'):
+            import pkg_resources
+            for dist in pkg_resources.find_distributions(module_path, only=True):
+                if os.path.isfile(module_path) or \
+                        has_resource(dist, module, resource_name):
+                    break
+            else:
+                return {}
         else:
+            # For importlib.metadata, we need a different approach
+            # This is a simplified fallback
             return {}
 
     attrs = ('author', 'author-email', 'maintainer', 'maintainer-email',

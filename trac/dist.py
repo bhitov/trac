@@ -24,22 +24,35 @@ time during install.
 from html.parser import HTMLParser
 import io
 import os
-import pkg_resources
+try:
+    from importlib.metadata import version as get_version
+    from importlib.metadata import PackageNotFoundError
+except ImportError:
+    # Python < 3.8 fallback
+    import pkg_resources
+    def get_version(name):
+        try:
+            return pkg_resources.get_distribution(name).version
+        except pkg_resources.DistributionNotFound:
+            raise PackageNotFoundError(name)
+    PackageNotFoundError = pkg_resources.DistributionNotFound
 import re
 from tokenize import generate_tokens, COMMENT, NAME, OP, STRING
 
 import jinja2
 from jinja2.ext import babel_extract as jinja2_extractor
 
-from distutils import log as distlog
-from distutils.cmd import Command
-from distutils.command.build import build as _build
-from distutils.errors import DistutilsOptionError
+from setuptools import Command
+from setuptools.command.build_py import build_py as _build
+from setuptools.errors import OptionError as DistutilsOptionError
 from setuptools.command.install_lib import install_lib as _install_lib
+import logging
+distlog = logging.getLogger('setuptools')
 
 
-_jinja2_ext_with = pkg_resources.parse_version(jinja2.__version__) < \
-                   pkg_resources.parse_version('3')
+# Parse version comparison
+from packaging.version import Version
+_jinja2_ext_with = Version(jinja2.__version__) < Version('3')
 
 
 def simplify_message(message):
@@ -433,8 +446,8 @@ try:
                     catalog = read_po(f, domain=self.domain)
                 for message in catalog:
                     for error in self._check_message(catalog, message):
-                        distlog.warn('%s:%d: %s', filename, message.lineno,
-                                     error)
+                        distlog.warning('%s:%d: %s', filename, message.lineno,
+                                        error)
 
         def _get_po_files(self):
             if self.input_file:

@@ -123,14 +123,39 @@ class FunctionalTestEnvironment(object):
                 env.config.save()
 
         """
-        pass
+        # Configure Clerk for functional testing
+        try:
+            from test_clerk_config import CLERK_TEST_CONFIG
+            env.config.set('clerk', 'secret_key', CLERK_TEST_CONFIG['secret_key'])
+            env.config.set('clerk', 'debug', str(CLERK_TEST_CONFIG['debug']).lower())
+        except ImportError:
+            # If no test config available, use basic test setup
+            env.config.set('clerk', 'secret_key', 'sk_test_functional_testing_key')
+            env.config.set('clerk', 'debug', 'true')
+        
+        # Ensure Clerk components are enabled and other auth is disabled
+        env.config.set('components', 'trac.auth.clerk.ClerkAuthenticator', 'enabled')
+        env.config.set('components', 'trac.auth.clerk.ClerkLoginModule', 'enabled')
+        env.config.set('components', 'trac.web.auth.LoginModule', 'disabled')
+        
+        # Configure intertrac for error reporting tests
+        env.config.set('intertrac', 'th.title', 'Trac Hacks')
+        env.config.set('intertrac', 'th.url', 'http://trac-hacks.org')
+        env.config.set('intertrac', 'th.compat', 'false')
+        
+        # Configure project admin for error reporting
+        env.config.set('project', 'admin_trac_url', 'https://trac.edgewall.org')
+        
+        env.config.save()
 
     def get_enabled_components(self):
         """Return a list of components that should be enabled after
         environment creation.  For anything more complicated, use the
         :meth:`post_create` method.
         """
-        return ['tracopt.versioncontrol.svn.*']
+        return ['tracopt.versioncontrol.svn.*', 
+                'trac.auth.clerk.ClerkAuthenticator',
+                'trac.auth.clerk.ClerkLoginModule']
 
     def create(self):
         """Create a new test environment.
@@ -154,13 +179,12 @@ class FunctionalTestEnvironment(object):
         config.save()
         self._tracadmin('initenv', self.tracdir, self.dburi,
                         '--config=%s' % config_file)
-        if call([sys.executable, '-m', 'contrib.htpasswd', '-c', '-b',
-                 self.htpasswd, 'admin', 'admin'],
-                close_fds=close_fds, cwd=self.command_cwd):
-            raise Exception("Unable to setup admin password")
+        # Skip htpasswd setup since we're using Clerk authentication
+        # Create users that functional tests expect
         self.adduser('user')
         self.adduser('joe')
-        self.grant_perm('admin', 'TRAC_ADMIN')
+        # Grant permissions
+        self.grant_perm('admin', 'TRAC_ADMIN')  # Clerk returns 'admin' as username for functional tests
         env = self.get_trac_environment()
         self.post_create(env)
 
@@ -171,21 +195,12 @@ class FunctionalTestEnvironment(object):
             self.logfile = None
 
     def adduser(self, user):
-        """Add a user to the environment.  The password will be set to the
-        same as username."""
+        """Add a user to the environment. With Clerk auth, just add the session."""
         self._tracadmin('session', 'add', user)
-        if call([sys.executable, '-m', 'contrib.htpasswd', '-b',
-                 self.htpasswd, user, user],
-                close_fds=close_fds, cwd=self.command_cwd):
-            raise Exception('Unable to setup password for user "%s"' % user)
 
     def deluser(self, user):
         """Delete a user from the environment."""
         self._tracadmin('session', 'delete', user)
-        if call([sys.executable, '-m', 'contrib.htpasswd', '-D',
-                 self.htpasswd, user],
-                close_fds=close_fds, cwd=self.command_cwd):
-            raise Exception('Unable to remove password for user "%s"' % user)
 
     def grant_perm(self, user, perm):
         """Grant permission(s) to specified user. A single permission may
@@ -208,10 +223,14 @@ class FunctionalTestEnvironment(object):
         may be specified as a string, or multiple permissions may be
         specified as a list or tuple of strings."""
         env = self.get_trac_environment()
-        if isinstance(perm, (list, tuple)):
-            PermissionAdmin(env)._do_remove(user, *perm)
-        else:
-            PermissionAdmin(env)._do_remove(user, perm)
+        try:
+            if isinstance(perm, (list, tuple)):
+                PermissionAdmin(env)._do_remove(user, *perm)
+            else:
+                PermissionAdmin(env)._do_remove(user, perm)
+        except Exception:
+            # Permission might not exist - that's okay for functional tests
+            pass
         # Force an environment reset (see grant_perm above)
         env.config.touch()
 
@@ -284,8 +303,7 @@ class FunctionalTestEnvironment(object):
     def start(self):
         """Starts the webserver, and waits for it to come up."""
         args = [sys.executable, '-m', 'trac.web.standalone']
-        options = ["--port=%s" % self.port, "-s", "--hostname=127.0.0.1",
-                   "--basic-auth=trac,%s," % self.htpasswd]
+        options = ["--port=%s" % self.port, "-s", "--hostname=127.0.0.1"]
         if 'TRAC_TEST_TRACD_OPTIONS' in os.environ:
             options += os.environ['TRAC_TEST_TRACD_OPTIONS'].split()
         self.server = Popen(args + options + [self.tracdir],
