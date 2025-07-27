@@ -144,7 +144,9 @@ class TicketsAPI(BaseRESTHandler):
             
             # Add custom fields
             custom_fields = {}
-            for field in ticket.fields:
+            from trac.ticket.api import TicketSystem
+            ticket_system = TicketSystem(self.env)
+            for field in ticket_system.get_ticket_fields():
                 if field.get('custom'):
                     field_name = field['name']
                     value = ticket[field_name]
